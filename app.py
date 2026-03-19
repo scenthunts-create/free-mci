@@ -12,22 +12,31 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. DATENBANK SETUP ---
+# --- 2. DATENBANK SETUP (Kugelsicher) ---
 USER_FILE = "user_data.json"
 
 def load_data():
-    if os.path.exists(USER_FILE):
-        with open(USER_FILE, "r") as f:
-            return json.load(f)
-    # Neue Parameter für die BMR-Berechnung hinzugefügt
-    return {
+    # Standardwerte, falls die Datenbank neu ist oder Werte fehlen
+    defaults = {
         "gewicht": 80.0, 
         "frequenz": 4, 
         "streak": 0,
         "alter": 30,
         "groesse": 180,
-        "geschlecht": "Männlich"
+        "geschlecht": "Männlich",
+        "ziel": "Muskelaufbau & Fettabbau"
     }
+    
+    if os.path.exists(USER_FILE):
+        with open(USER_FILE, "r") as f:
+            data = json.load(f)
+            # Füllt fehlende Schlüssel (wie 'geschlecht') mit Standardwerten auf
+            for key, value in defaults.items():
+                if key not in data:
+                    data[key] = value
+            return data
+            
+    return defaults
 
 def save_data(data):
     with open(USER_FILE, "w") as f:
@@ -37,8 +46,15 @@ user_data = load_data()
 
 # --- 3. BMR & KALORIEN LOGIK (Mifflin-St. Jeor) ---
 def berechne_kalorien(daten):
-    s = 5 if daten["geschlecht"] == "Männlich" else -161
-    bmr = (10 * daten["gewicht"]) + (6.25 * daten["groesse"]) - (5 * daten["alter"]) + s
+    # Nutzt .get() zur Sicherheit, falls doch mal ein Wert fehlt
+    geschlecht = daten.get("geschlecht", "Männlich")
+    gewicht = float(daten.get("gewicht", 80.0))
+    groesse = int(daten.get("groesse", 180))
+    alter = int(daten.get("alter", 30))
+    
+    s = 5 if geschlecht == "Männlich" else -161
+    bmr = (10 * gewicht) + (6.25 * groesse) - (5 * alter) + s
+    
     # Aktivitätsfaktor 1.55 für 3-4 intensive Einheiten pro Woche
     tdee = bmr * 1.55 
     # Recomposition Ziel: Leichtes Defizit (-300 kcal) für Fettabbau bei Muskelaufbau
@@ -114,11 +130,14 @@ with tab_heute:
             st.write("2. **Mobility-Routine (Hüfte & Schultern aufdehnen)**")
             st.write("3. **Kein schweres Krafttraining heute.** Iss genug Protein und schlafe gut.")
         else:
-            st.success(f"System Check " + ("🟢" if muskelkater < 5 else "🟡") + f" | Plan für {verfuegbare_zeit} im {trainings_ort} erstellt!")
-            st.markdown("### Dein Workout für heute:")
-            
-            # Leicht gedrosseltes Volumen bei mittlerer Erschöpfung
+            # Code für die Workouts
             saetze = "3 Sätze" if muskelkater >= 5 or schlaf <= 5 else "4 Sätze"
+            if muskelkater < 5 and schlaf > 5 and stress < 5:
+                st.success(f"System Check 🟢 | Plan für {verfuegbare_zeit} im {trainings_ort} erstellt!")
+            else:
+                st.warning(f"System Check 🟡 | Volumen leicht reduziert. Plan für {verfuegbare_zeit} im {trainings_ort} erstellt!")
+                
+            st.markdown("### Dein Workout für heute:")
             
             if trainings_ort == "All-Inclusive Gym":
                 st.write(f"1. **Kniebeugen (Squats)** - {saetze}")
@@ -166,7 +185,7 @@ with tab_ernährung:
                             with st.expander(f"📊 {name}"):
                                 st.write(f"**{kalorien} kcal** / 100g | **Protein:** {protein}g / 100g")
 
-# --- TAB: PROFIL (Erweitert für KI-Berechnung) ---
+# --- TAB: PROFIL ---
 with tab_profil:
     st.header("⚙️ Körperdaten für den AI-Rechner")
     col_p1, col_p2 = st.columns(2)
