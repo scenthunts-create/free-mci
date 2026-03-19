@@ -21,14 +21,13 @@ st.markdown("""
     div[data-testid="stTabs"] button { color: #A0AAB2; }
     div[data-testid="stTabs"] button[aria-selected="true"] { color: #4A90E2; border-bottom-color: #4A90E2; }
     hr { border-top: 1px solid #2C353C; }
-    /* Styling für die Set-Reihen */
     .set-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #2C353C; }
     .set-number { font-weight: bold; color: #A0AAB2; width: 50px; }
+    .exercise-muscle { color: #8E8E93; font-size: 0.9em; margin-top: -10px; margin-bottom: 10px;}
 </style>
 """, unsafe_allow_html=True)
 
 # --- 2. KURZZEITGEDÄCHTNIS (Session State) ---
-# Merkt sich die Daten, während du trainierst, bevor sie in die Datenbank gehen
 if "workout_aktiv" not in st.session_state:
     st.session_state.workout_aktiv = False
 if "aktuelle_saetze" not in st.session_state:
@@ -36,7 +35,7 @@ if "aktuelle_saetze" not in st.session_state:
 if "zeige_timer" not in st.session_state:
     st.session_state.zeige_timer = False
 
-# --- 3. DER LIVE-TIMER (JavaScript Injection) ---
+# --- 3. DER LIVE-TIMER (JavaScript) ---
 def start_pause_timer(sekunden=180):
     html_code = f"""
     <div style="text-align: center; background-color: #2C353C; padding: 15px; border-radius: 8px; margin: 15px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
@@ -47,16 +46,12 @@ def start_pause_timer(sekunden=180):
         var timeLeft = {sekunden};
         var elem = document.getElementById('timer');
         var timerId = setInterval(countdown, 1000);
-        
         function formatTime(seconds) {{
             var m = Math.floor(seconds / 60);
             var s = seconds % 60;
             return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
         }}
-        
-        // Sofortige Anzeige beim Start
         elem.innerHTML = formatTime(timeLeft);
-        
         function countdown() {{
             if (timeLeft <= 0) {{
                 clearTimeout(timerId);
@@ -85,12 +80,76 @@ def init_connection():
 client = init_connection()
 verbindung_erfolgreich = client is not None
 
-# --- 5. NAVIGATION ---
+if verbindung_erfolgreich:
+    try:
+        sheet = client.open("Free-MCI-DB")
+        verlauf_blatt = sheet.worksheet("Verlauf")
+    except Exception:
+        verbindung_erfolgreich = False
+
+# --- 5. DIE ÜBUNGS-DATENBANK ---
+exercise_db = {
+    "A": [("Ab Wheel", "Core"), ("Aerobics", "Cardio"), ("Arnold Press (Dumbbell)", "Shoulders"), ("Around the World", "Chest"), ("Ausfallschritte (Lunges)", "Legs")],
+    "B": [("Back Extension", "Back"), ("Ball Slams", "Full Body"), ("Bankdrücken (Barbell)", "Chest"), ("Bankdrücken (Dumbbell)", "Chest"), ("Burpees", "Full Body")],
+    "C": [("Cable Crossover", "Chest"), ("Calf Raise (Machine)", "Legs"), ("Chest Press (Machine)", "Chest"), ("Crunch", "Core"), ("Cycling", "Cardio")],
+    "D": [("Deadlift (Barbell)", "Back"), ("Decline Bench Press", "Chest"), ("Dips", "Chest/Arms"), ("Dumbbell Row", "Back")],
+    "F": [("Face Pull (Cable)", "Shoulders"), ("Farmer's Walk", "Full Body"), ("Front Squat", "Legs")],
+    "H": [("Hanging Leg Raise", "Core"), ("Hip Thrust (Barbell)", "Legs"), ("Hyperextension", "Back")],
+    "I": [("Incline Bench Press (Barbell)", "Chest"), ("Incline Bench Press (Dumbbell)", "Chest")],
+    "K": [("Klimmzüge (Pull Up)", "Back"), ("Kniebeugen (Squat)", "Legs"), ("Kreuzheben", "Back")],
+    "L": [("Lat Pulldown (Cable)", "Back"), ("Lateral Raise (Cable)", "Shoulders"), ("Lateral Raise (Dumbbell)", "Shoulders"), ("Leg Extension (Machine)", "Legs"), ("Leg Press", "Legs")],
+    "M": [("Military Press (Barbell)", "Shoulders"), ("Muscle-Up", "Full Body")],
+    "P": [("Pec Deck (Machine)", "Chest"), ("Pendlay Row", "Back"), ("Pistol Squat", "Legs"), ("Plank", "Core"), ("Pull Up", "Back"), ("Pull Up (Assisted)", "Back"), ("Push Press", "Shoulders"), ("Push Up", "Chest")],
+    "R": [("Rack Pull", "Back"), ("Reverse Crunch", "Core"), ("Reverse Fly (Machine)", "Shoulders"), ("Romanian Deadlift", "Legs"), ("Russian Twist", "Core")],
+    "S": [("Seated Calf Raise", "Legs"), ("Seated Leg Curl", "Legs"), ("Seated Overhead Press", "Shoulders"), ("Shrug (Barbell)", "Back"), ("Single Leg Bridge", "Legs"), ("Sit Up", "Core"), ("Skullcrusher", "Arms"), ("Squat (Barbell)", "Legs"), ("Squat (Bodyweight)", "Legs"), ("Squat (Smith Machine)", "Legs"), ("Standing Calf Raise", "Legs"), ("Sumo Deadlift", "Back")],
+    "T": [("T Bar Row", "Back"), ("Thruster", "Full Body"), ("Toes To Bar", "Core"), ("Torso Rotation (Machine)", "Core"), ("Trap Bar Deadlift", "Legs"), ("Triceps Dip", "Arms"), ("Triceps Extension (Cable)", "Arms"), ("Triceps Pushdown (Cable)", "Arms")],
+    "U": [("Upright Row (Barbell)", "Shoulders"), ("Upright Row (Cable)", "Shoulders")],
+    "V": [("V Up", "Core")],
+    "W": [("Walking", "Cardio"), ("Wide Pull Up", "Back"), ("Wrist Roller", "Arms")],
+    "Y": [("Yoga", "Cardio")],
+    "Z": [("Zercher Squat", "Legs")]
+}
+
+# Flache Liste aller Übungen für das Dropdown-Menü erstellen
+alle_uebungen = sorted([uebung[0] for sublist in exercise_db.values() for uebung in sublist])
+
+# --- 6. NAVIGATION ---
 tab_profil, tab_verlauf, tab_workout, tab_uebungen, tab_messen = st.tabs([
     "👤 Profil", "🕒 Verlauf", "➕ Workout", "🏋️ Übungen", "📏 Messen"
 ])
 
-# --- TAB: WORKOUT (Das neue Strong-Interface) ---
+# --- TAB 1: PROFIL ---
+with tab_profil:
+    col_av, col_name = st.columns([1, 4])
+    with col_av:
+        st.markdown("<div style='background-color:#E91E63; border-radius:50%; width:50px; height:50px; display:flex; justify-content:center; align-items:center; font-size:24px; font-weight:bold;'>S</div>", unsafe_allow_html=True)
+    with col_name:
+        st.subheader("ScentHunts")
+    
+    st.divider()
+    st.markdown("### System Check")
+    if verbindung_erfolgreich:
+        st.success("🟢 Live-Verbindung zur Datenbank aktiv!")
+    else:
+        st.error("🔴 Keine Verbindung. Bitte prüfe die Secrets in Streamlit.")
+
+# --- TAB 2: VERLAUF ---
+with tab_verlauf:
+    st.markdown("### Trainings-Historie")
+    if verbindung_erfolgreich:
+        try:
+            daten = verlauf_blatt.get_all_records()
+            if not daten:
+                st.write("Du hast noch keine Workouts absolviert. Dein Verlauf ist leer.")
+            else:
+                df = pd.DataFrame(daten)
+                st.dataframe(df, use_container_width=True)
+        except Exception as e:
+            st.error("Fehler beim Laden des Verlaufs aus Google Sheets.")
+    else:
+        st.write("Warte auf Datenbank-Verbindung...")
+
+# --- TAB 3: WORKOUT ---
 with tab_workout:
     if not st.session_state.workout_aktiv:
         st.markdown("### Schnellstart")
@@ -101,7 +160,7 @@ with tab_workout:
         st.markdown("### 🔥 Aktives Workout")
         st.write("Wähle eine Übung und logge deine Sätze.")
         
-        ausgewaehlte_uebung = st.selectbox("Übung hinzufügen", ["Bankdrücken (Barbell)", "Kniebeugen (Squat)", "Klimmzüge (Pull Up)", "Deadlift (Barbell)"])
+        ausgewaehlte_uebung = st.selectbox("Übung hinzufügen", alle_uebungen)
         
         st.divider()
         st.markdown(f"**{ausgewaehlte_uebung}**")
@@ -118,43 +177,30 @@ with tab_workout:
         with col2:
             reps_input = st.number_input("Wdh", value=10, step=1)
         with col3:
-            st.write("") # Platzhalter für vertikale Ausrichtung
+            st.write("") 
             st.write("")
             if st.button("Satz loggen (3 Min Pause)"):
-                # Satz im Kurzzeitgedächtnis speichern
-                neuer_satz = {
-                    "uebung": ausgewaehlte_uebung,
-                    "gewicht": gewicht_input,
-                    "reps": reps_input
-                }
+                neuer_satz = {"uebung": ausgewaehlte_uebung, "gewicht": gewicht_input, "reps": reps_input}
                 st.session_state.aktuelle_saetze.append(neuer_satz)
                 st.session_state.zeige_timer = True
                 st.rerun()
         
-        # Den Timer anzeigen, wenn ein Satz geloggt wurde
         if st.session_state.zeige_timer:
-            start_pause_timer(180) # 180 Sekunden = 3 Minuten
+            start_pause_timer(180) 
         
         st.divider()
         
-        # Workout beenden und in Google Sheets speichern
         if st.button("🛑 Workout beenden & speichern", type="primary"):
             if verbindung_erfolgreich and st.session_state.aktuelle_saetze:
                 try:
-                    sheet = client.open("Free-MCI-DB")
-                    verlauf_blatt = sheet.worksheet("Verlauf")
                     heute = str(date.today())
-                    
-                    # Bereitet alle Sätze für den Upload vor
                     zeilen_fuer_db = []
                     for satz in st.session_state.aktuelle_saetze:
                         zeilen_fuer_db.append([heute, "Freies Workout", satz['uebung'], satz['gewicht'], satz['reps']])
                     
-                    # Schreibt alle Sätze auf einmal in die Tabelle (API-Limit schonend)
                     verlauf_blatt.append_rows(zeilen_fuer_db)
                     
                     st.success(f"{len(st.session_state.aktuelle_saetze)} Sätze erfolgreich in Google Sheets gesichert!")
-                    # Kurzzeitgedächtnis leeren
                     st.session_state.workout_aktiv = False
                     st.session_state.aktuelle_saetze = []
                     st.session_state.zeige_timer = False
@@ -165,8 +211,27 @@ with tab_workout:
             else:
                 st.warning("Du hast noch keine Sätze geloggt.")
 
-# (Der Rest der App für Profil, Verlauf etc. bleibt identisch und läuft im Hintergrund weiter)
-with tab_profil:
-    st.subheader("Profil")
-    if verbindung_erfolgreich: st.success("🟢 Datenbank verbunden!") 
-    else: st.error("🔴 Warte auf Datenbank-Secrets...")
+# --- TAB 4: ÜBUNGEN ---
+with tab_uebungen:
+    st.text_input("🔍 Übungen durchsuchen...", placeholder="z.B. Squat, Bench Press")
+    
+    for letter in sorted(exercise_db.keys()):
+        st.markdown(f"### {letter}")
+        for exercise_name, muscle_group in exercise_db[letter]:
+            st.markdown(f"**{exercise_name}**")
+            st.markdown(f"<div class='exercise-muscle'>{muscle_group}</div>", unsafe_allow_html=True)
+        st.divider()
+
+# --- TAB 5: MESSEN ---
+with tab_messen:
+    st.markdown("### Allgemein")
+    st.write("Gewicht")
+    st.write("Körperfettanteil")
+    st.write("Kalorieneinnahme")
+    st.divider()
+    st.markdown("### Körperteil")
+    st.write("Nacken")
+    st.write("Schultern")
+    st.write("Brust")
+    st.write("Linker Bizeps")
+    st.write("Rechter Bizeps")
