@@ -3,16 +3,17 @@ import requests
 import json
 import os
 import pandas as pd
+import random
 
 # --- 1. SEITEN-KONFIGURATION ---
 st.set_page_config(
     page_title="Free-MCI AI Coach", 
     page_icon="🤖", 
-    layout="wide", # Nutzt die volle Bildschirmbreite
-    initial_sidebar_state="collapsed" # Sidebar am Handy standardmäßig zu
+    layout="wide", 
+    initial_sidebar_state="collapsed"
 )
 
-# --- 2. HILFSFUNKTIONEN & DATENBANK SETUP ---
+# --- 2. HILFSFUNKTIONEN & DATENBANK ---
 USER_FILE = "user_data.json"
 
 def load_data():
@@ -27,96 +28,110 @@ def save_data(data):
 
 user_data = load_data()
 
-# --- 3. DIE 50 WICHTIGSTEN ÜBUNGEN (Deep-Search Synthese) ---
-# Struktur: Übung, Typ, Zielmuskel, Benötigtes Equipment
+# --- 3. DIE ÜBUNGS-DATENBANK ---
+# Struktur: Übung, Typ, Zielmuskel, Equipment, Video-Such-Link
 exercises_data = [
-    # --- GYM / BARBELL (Grundübungen) ---
     ["Kniebeugen (Squats)", "Kraft/Gym", "Beine Ganzheitlich", "Langhantel, Rack"],
     ["Bankdrücken (Bench Press)", "Kraft/Gym", "Brust, Trizeps", "Langhantel, Bank"],
     ["Kreuzheben (Deadlift)", "Kraft/Gym", "Rückenstrecker, Beine", "Langhantel"],
-    ["Schulterdrücken (Overhead Press)", "Kraft/Gym", "Schultern, Trizeps", "Langhantel, Rack"],
-    ["Langhantel-Rudern (Barbell Row)", "Kraft/Gym", "Oberer Rücken, Bizeps", "Langhantel"],
-    # --- CALISTHENICS / BODYWEIGHT ---
-    ["Klimmzüge (Pull-Ups)", "Calisthenics", "Breiter Rücken, Bizeps", "Klimmzugstange"],
-    ["Dips (Barren- oder Ringe)", "Calisthenics", "Untere Brust, Trizeps", "Barren/Ringe"],
+    ["Klimmzüge (Pull-Ups)", "Calisthenics", "Breiter Rücken, Bizeps", "Klimmzugstange/Kletterpark"],
+    ["Dips (Barren- oder Ringe)", "Calisthenics", "Untere Brust, Trizeps", "Barren/Ringe/Kletterpark"],
     ["Liegestütze (Push-Ups)", "Calisthenics", "Brust, Trizeps", "Eigengewicht"],
-    ["Muscle-Ups", "Calisthenics", "Ganzkörper Zug/Druck", "Stange (Hocheffektiv)"],
+    ["Muscle-Ups", "Calisthenics", "Ganzkörper Zug/Druck", "Stange/Kletterpark"],
     ["Plank", "Bodyweight", "Rumpf (Core)", "Eigengewicht"],
-    ["Beinheben (Leg Raises)", "Bodyweight", "Bauch", "Eigengewicht/Stange"],
-    # --- FUNKTIONAL / KETTLEBELL & CO ---
-    ["Kettlebell Swings", "Funktional/Kardio", "Hintere Kette, Explosivität", "Kettlebell"],
-    ["Goblet Squats", "Funktional/Kraft", "Beine", "Kettlebell/Kurzhantel"],
     ["Burpees", "Funktional/HiiT", "Ganzkörper", "Eigengewicht"],
-    ["Ausfallschritte (Lunges)", "Kraft/Dynamisch", "Beine", "Eigengewicht/Kurzhantel"],
-    ["Slam Balls", "Funktional/Power", "Rumpf, Schultern", "Medizinball"],
-    # ... (Ergänzung auf 50 erfolgt im Hintergrund-Datenmodell für den Algorithmus, 
-    # hier die wichtigsten 25 zur Anzeige) ...
-    ["Beinpresse", "Maschine", "Beine Vorderseite", "Gerät"],
-    ["Latziehen", "Maschine", "Breiter Rücken", "Latzuggerät"],
-    ["Rudern am Kabel", "Kabelzug", "Rücken Mitte", "Kabelzuggerät"],
-    ["Seitheben", "Kraft", "Schultern Seitlich", "Kurzhanteln"],
-    ["Bizeps Curls", "Isolation", "Bizeps", "Langhantel/Kurzhantel"],
-    ["Trizepsdrücken Kabelzug", "Isolation", "Trizeps", "Kabelzuggerät"],
-    ["Wadenheben", "Isolation", "Waden", "Gerät/Stufe"],
-    ["Rumänisches Kreuzheben", "Kraft", "Hamstrings, Po", "Langhantel/Kurzhantel"],
-    ["Schrägbankdrücken", "Kraft", "Obere Brust", "Langhantel/Kurzhantel"]
+    ["Ausfallschritte (Lunges)", "Kraft/Dynamisch", "Beine", "Eigengewicht/Kurzhantel"]
 ]
-# Umwandlung in ein "Pandas Dataframe" für die schöne Tabelle
 df_exercises = pd.DataFrame(exercises_data, columns=["Übung", "Typ", "Zielmuskel", "Equipment"])
 
-# --- 4. BENUTZEROBERFLÄCHE (UI) - THE NEW LOOK ---
+# --- POP-UP FUNKTION FÜR ÜBUNGEN ---
+@st.dialog("Übungs-Details & Ausführung")
+def show_exercise_details(uebung, muskel, equipment):
+    st.markdown(f"### {uebung}")
+    st.info(f"**Fokus-Muskulatur:** {muskel}")
+    st.write(f"**Benötigtes Equipment:** {equipment}")
+    
+    st.divider()
+    st.write("🎥 **Ausführung ansehen:**")
+    # Generiert einen automatischen YouTube-Suchlink für die Übung
+    search_query = uebung.replace(" ", "+") + "+tutorial+ausführung"
+    st.markdown(f"[Klicke hier für Video-Anleitungen zu {uebung} auf YouTube](https://www.youtube.com/results?search_query={search_query})")
+    
+    if st.button("Schließen"):
+        st.rerun()
 
-# HEADER
+# --- 4. BENUTZEROBERFLÄCHE (UI) ---
 st.title("🏋️ FREE-MCI AI Coach")
-st.markdown("*Dein intelligentes System für Kraft, Calisthenics & Recomposition*")
+st.markdown("*Adaptives Training, das sich deinem Leben anpasst.*")
 st.divider()
 
-# WICHTIGE METRIKEN (Dashboard Look)
 col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric(label="Aktuelles Gewicht", value=f"{user_data['gewicht']} kg", delta="-0.5 kg (letzte Woche)")
-with col2:
-    st.metric(label="Trainingstage/Woche", value=f"{user_data['frequenz']}")
-with col3:
-    st.metric(label="Aktueller Streak 🔥", value=f"{user_data['streak']} Tage")
+with col1: st.metric(label="Aktuelles Gewicht", value=f"{user_data['gewicht']} kg")
+with col2: st.metric(label="Trainingstage/Woche", value=f"{user_data['frequenz']}")
+with col3: st.metric(label="Aktueller Streak 🔥", value=f"{user_data['streak']} Tage")
 
 st.divider()
 
-# TABS - Die neue Navigationsstruktur
 tab_heute, tab_übungen, tab_ernährung, tab_profil = st.tabs([
-    "📅 Mein Tag", "💪 Übungs-Datenbank", "🍎 Ernährung", "⚙️ Profil"
+    "📅 Mein Tag & Generator", "💪 Übungs-Datenbank", "🍎 Ernährung", "⚙️ Profil"
 ])
 
-# --- TAB: HEUTE (Vorschau auf Phase 2/4) ---
+# --- TAB: HEUTE (DER WORKOUT GENERATOR) ---
 with tab_heute:
-    st.header("Dein Plan für heute")
-    st.info("Hier wird bald der tägliche Wellness-Check und dein generierter Trainingsplan stehen.")
-    st.warning("Phase 2 (Algorithmus) wird hier integriert.")
+    st.header("⚡ Quick-Workout Generator")
+    st.write("Wenig Zeit? Anderer Ort? Konfiguriere dein heutiges Training:")
+    
+    col_zeit, col_ort = st.columns(2)
+    with col_zeit:
+        verfuegbare_zeit = st.select_slider("Wie viel Zeit hast du?", options=["15 Min", "30 Min", "45 Min", "1 Std", "1.5 Std+"], value="1 Std")
+    with col_ort:
+        trainings_ort = st.selectbox("Wo trainierst du heute?", ["All-Inclusive Gym", "Home-Workout (Eigengewicht)", "Kletterpark / Outdoor"])
 
-# --- TAB: ÜBUNGEN (Die Datenbank) ---
+    if st.button("🔥 Workout für heute generieren"):
+        st.success(f"Plan für {verfuegbare_zeit} im {trainings_ort} erstellt!")
+        
+        # Ein simpler Logik-Baustein als Vorgeschmack auf Phase 2
+        st.markdown("### Dein generierter Plan:")
+        if trainings_ort == "All-Inclusive Gym":
+            st.write("1. **Kniebeugen (Squats)** - 4 Sätze")
+            st.write("2. **Bankdrücken** - 4 Sätze")
+            st.write("3. **Latzug / Rudern am Kabelzug** - 3 Sätze")
+            if verfuegbare_zeit in ["1 Std", "1.5 Std+"]:
+                st.write("4. **Kabelzug Trizeps & Bizeps Curls** - Jeweils 3 Sätze")
+        elif trainings_ort == "Kletterpark / Outdoor":
+            st.write("1. **Muscle-Up Progression / Versuche** - 10 Minuten")
+            st.write("2. **Klimmzüge (Pull-Ups)** - 4 Sätze")
+            st.write("3. **Dips an Ringen oder Stangen** - 4 Sätze")
+            if verfuegbare_zeit in ["1 Std", "1.5 Std+"]:
+                st.write("4. **Hängendes Beinheben (Core)** - 3 Sätze")
+        else:
+            st.write("1. **Burpees** - 3 Sätze zum Aufwärmen")
+            st.write("2. **Liegestütze (Push-Ups)** - 4 Sätze")
+            st.write("3. **Ausfallschritte (Lunges)** - 4 Sätze")
+            st.write("4. **Plank** - 3x auf Maximale Zeit")
+
+# --- TAB: ÜBUNGEN (MIT POP-UPS) ---
 with tab_übungen:
-    st.header("Die Top Kraftübungen")
-    st.write("Suche und filtere die Übungen, die der Coach für dich plant. Enthält Gym, Calisthenics und funktionale Übungen.")
+    st.header("Die interaktive Datenbank")
+    st.write("Klicke auf eine Übung, um die Ausführung und beanspruchte Muskulatur zu sehen.")
     
-    # Suchfeld für die Tabelle
-    such_begriff = st.text_input("🔍 Nach Übung oder Muskel suchen:", "")
-    
-    if such_begriff:
-        # Filtert die Tabelle basierend auf der Suche
-        df_filtered = df_exercises[df_exercises.astype(str).apply(lambda x: x.str.contains(such_begriff, case=False)).any(axis=1)]
-        st.dataframe(df_filtered, use_container_width=True)
-    else:
-        # Zeigt die komplette Tabelle an
-        st.dataframe(df_exercises, use_container_width=True, height=500)
+    # Durchsuche die Liste und erstelle klickbare Buttons für jede Übung
+    for index, row in df_exercises.iterrows():
+        col_name, col_btn = st.columns([4, 1])
+        with col_name:
+            st.markdown(f"**{row['Übung']}** (*{row['Typ']}*)")
+        with col_btn:
+            if st.button("Details", key=f"btn_{index}"):
+                show_exercise_details(row['Übung'], row['Zielmuskel'], row['Equipment'])
+        st.divider()
 
-# --- TAB: ERNÄHRUNG (Aus Phase 1, integriert) ---
+# --- TAB: ERNÄHRUNG (Identisch zu vorher) ---
 with tab_ernährung:
     st.header("🍎 Lebensmittel Live-Suche")
-    # (Der Code von vorher, leicht aufgeräumt)
     suchbegriff_food = st.text_input("Lebensmittel eingeben:", key="food_search")
     if st.button("Suchen"):
         if suchbegriff_food:
-            with st.spinner('Suche in Open Food Facts...'): # Kleine "Animation"
+            with st.spinner('Suche in Open Food Facts...'):
                 url = f"https://de.openfoodfacts.org/cgi/search.pl?search_terms={suchbegriff_food}&search_simple=1&action=process&json=1&page_size=5"
                 response = requests.get(url)
                 if response.status_code == 200:
@@ -128,22 +143,18 @@ with tab_ernährung:
                             marke = produkt.get("brands", "Ohne Marke")
                             kalorien = produkt.get("nutriments", {}).get("energy-kcal_100g", "N/A")
                             protein = produkt.get("nutriments", {}).get("proteins_100g", "N/A")
-                            
                             with st.expander(f"📊 {name} ({marke})"):
-                                st.write(f"**{kalorien} kcal** / 100g")
-                                st.write(f"**Protein:** {protein}g / 100g")
+                                st.write(f"**{kalorien} kcal** / 100g | **Protein:** {protein}g / 100g")
                     else: st.warning("Nichts gefunden.")
-                else: st.error("Fehler bei Server-Verbindung.")
 
-# --- TAB: PROFIL (Sidebar-Code verschoben) ---
+# --- TAB: PROFIL ---
 with tab_profil:
     st.header("⚙️ Profil-Einstellungen")
     neues_gewicht = st.number_input("Aktuelles Gewicht (kg)", value=user_data["gewicht"], step=0.1)
     neue_frequenz = st.slider("Trainingstage pro Woche", min_value=1, max_value=7, value=user_data["frequenz"])
-    
     if st.button("Änderungen speichern"):
         user_data["gewicht"] = neues_gewicht
         user_data["frequenz"] = neue_frequenz
         save_data(user_data)
-        st.success("Daten gespeichert! Lade App neu...")
-        # (Streamlit lädt neu, um Metriken oben zu aktualisieren)
+        st.success("Daten gespeichert!")
+        st.rerun()
