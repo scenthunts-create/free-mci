@@ -8,65 +8,48 @@ st.set_page_config(page_title="Free-MCI", page_icon="👑", layout="centered", i
 # --- 2. CUSTOM CSS (Das Strong-Design) ---
 st.markdown("""
 <style>
-    /* Hintergrund & Textfarben an Strong anpassen */
-    .stApp {
-        background-color: #1B2126;
-        color: #FFFFFF;
-    }
-    /* Der markante blaue Button */
+    .stApp { background-color: #1B2126; color: #FFFFFF; }
     .stButton>button {
-        background-color: #4A90E2;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        width: 100%;
-        font-weight: bold;
-        padding: 10px 0;
+        background-color: #4A90E2; color: white; border-radius: 8px;
+        border: none; width: 100%; font-weight: bold; padding: 10px 0;
     }
-    .stButton>button:hover {
-        background-color: #357ABD;
-        color: white;
-    }
-    /* Karten / Container Styling */
-    div[data-testid="stMetricValue"] {
-        color: #FFFFFF;
-    }
-    div[data-testid="stTabs"] button {
-        color: #A0AAB2;
-    }
-    div[data-testid="stTabs"] button[aria-selected="true"] {
-        color: #4A90E2;
-        border-bottom-color: #4A90E2;
-    }
-    /* Dezente graue Linien */
-    hr {
-        border-top: 1px solid #2C353C;
-    }
+    .stButton>button:hover { background-color: #357ABD; color: white; }
+    div[data-testid="stMetricValue"] { color: #FFFFFF; }
+    div[data-testid="stTabs"] button { color: #A0AAB2; }
+    div[data-testid="stTabs"] button[aria-selected="true"] { color: #4A90E2; border-bottom-color: #4A90E2; }
+    hr { border-top: 1px solid #2C353C; }
+    .exercise-muscle { color: #8E8E93; font-size: 0.9em; margin-top: -10px; margin-bottom: 10px;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. DATEN-MOCKUP (Wird später durch Google Sheets ersetzt) ---
-# Simulierte Historie für die Progression
-letztes_workout = {
-    "Kniebeugen": {"gewicht": 80.0, "saetze": [12, 12, 12], "ziel_reps": 12},
-    "Bankdrücken": {"gewicht": 100.0, "saetze": [10, 9, 8], "ziel_reps": 12}
+# --- 3. DATENBANK (Clean Slate) ---
+# Verlauf und Workouts sind jetzt komplett auf Null gesetzt
+letztes_workout = {}
+
+# Die massive Übungs-Bibliothek (Alphabetisch sortiert)
+exercise_db = {
+    "A": [("Ab Wheel", "Core"), ("Aerobics", "Cardio"), ("Arnold Press (Dumbbell)", "Shoulders"), ("Around the World", "Chest"), ("Ausfallschritte (Lunges)", "Legs")],
+    "B": [("Back Extension", "Back"), ("Ball Slams", "Full Body"), ("Bankdrücken (Barbell)", "Chest"), ("Bankdrücken (Dumbbell)", "Chest"), ("Burpees", "Full Body")],
+    "C": [("Cable Crossover", "Chest"), ("Calf Raise (Machine)", "Legs"), ("Chest Press (Machine)", "Chest"), ("Crunch", "Core"), ("Cycling", "Cardio")],
+    "D": [("Deadlift (Barbell)", "Back"), ("Decline Bench Press", "Chest"), ("Dips", "Chest/Arms"), ("Dumbbell Row", "Back")],
+    "F": [("Face Pull (Cable)", "Shoulders"), ("Farmer's Walk", "Full Body"), ("Front Squat", "Legs")],
+    "H": [("Hanging Leg Raise", "Core"), ("Hip Thrust (Barbell)", "Legs"), ("Hyperextension", "Back")],
+    "I": [("Incline Bench Press (Barbell)", "Chest"), ("Incline Bench Press (Dumbbell)", "Chest")],
+    "K": [("Klimmzüge (Pull Up)", "Back"), ("Kniebeugen (Squat)", "Legs"), ("Kreuzheben", "Back")],
+    "L": [("Lat Pulldown (Cable)", "Back"), ("Lateral Raise (Cable)", "Shoulders"), ("Lateral Raise (Dumbbell)", "Shoulders"), ("Leg Extension (Machine)", "Legs"), ("Leg Press", "Legs")],
+    "M": [("Military Press (Barbell)", "Shoulders"), ("Muscle-Up", "Full Body")],
+    "P": [("Pec Deck (Machine)", "Chest"), ("Pendlay Row", "Back"), ("Pistol Squat", "Legs"), ("Plank", "Core"), ("Pull Up", "Back"), ("Pull Up (Assisted)", "Back"), ("Push Press", "Shoulders"), ("Push Up", "Chest")],
+    "R": [("Rack Pull", "Back"), ("Reverse Crunch", "Core"), ("Reverse Fly (Machine)", "Shoulders"), ("Romanian Deadlift", "Legs"), ("Russian Twist", "Core")],
+    "S": [("Seated Calf Raise", "Legs"), ("Seated Leg Curl", "Legs"), ("Seated Overhead Press", "Shoulders"), ("Shrug (Barbell)", "Back"), ("Single Leg Bridge", "Legs"), ("Sit Up", "Core"), ("Skullcrusher", "Arms"), ("Squat (Barbell)", "Legs"), ("Squat (Bodyweight)", "Legs"), ("Squat (Smith Machine)", "Legs"), ("Standing Calf Raise", "Legs"), ("Sumo Deadlift", "Back")],
+    "T": [("T Bar Row", "Back"), ("Thruster", "Full Body"), ("Toes To Bar", "Core"), ("Torso Rotation (Machine)", "Core"), ("Trap Bar Deadlift", "Legs"), ("Triceps Dip", "Arms"), ("Triceps Extension (Cable)", "Arms"), ("Triceps Pushdown (Cable)", "Arms")],
+    "U": [("Upright Row (Barbell)", "Shoulders"), ("Upright Row (Cable)", "Shoulders")],
+    "V": [("V Up", "Core")],
+    "W": [("Walking", "Cardio"), ("Wide Pull Up", "Back"), ("Wrist Roller", "Arms")],
+    "Y": [("Yoga", "Cardio")],
+    "Z": [("Zercher Squat", "Legs")]
 }
 
-# --- 4. PROGRESSIONS-ALGORITHMUS (Die AI-Empfehlung) ---
-def generiere_empfehlung(uebung):
-    if uebung not in letztes_workout:
-        return "Starte mit einem leichten Gewicht zum Testen (3x10)"
-    
-    daten = letztes_workout[uebung]
-    min_reps = min(daten["saetze"])
-    
-    if min_reps >= daten["ziel_reps"]:
-        neues_gewicht = daten["gewicht"] + 2.5
-        return f"🔥 Ziel erreicht! Erhöhe heute auf **{neues_gewicht} kg** (Ziel: 3 Sätze à 8-10 Wdh)."
-    else:
-        return f"💡 Bleib heute bei **{daten['gewicht']} kg**. Versuche, in den Sätzen mehr als {daten['saetze']} Wdh. zu knacken!"
-
-# --- 5. NAVIGATION (Die 5 Strong-Tabs) ---
+# --- 4. NAVIGATION ---
 tab_profil, tab_verlauf, tab_workout, tab_uebungen, tab_messen = st.tabs([
     "👤 Profil", "🕒 Verlauf", "➕ Workout", "🏋️ Übungen", "📏 Messen"
 ])
@@ -78,68 +61,37 @@ with tab_profil:
         st.markdown("<div style='background-color:#E91E63; border-radius:50%; width:50px; height:50px; display:flex; justify-content:center; align-items:center; font-size:24px; font-weight:bold;'>S</div>", unsafe_allow_html=True)
     with col_name:
         st.subheader("ScentHunts")
-        st.caption("27 Workouts")
+        st.caption("0 Workouts")
     
     st.divider()
     st.markdown("### Dashboard ➕")
-    st.info("📊 Hier binden wir später das Balkendiagramm für deine Workouts pro Woche ein.")
-    
-    # Body Recomposition Metriken
-    col1, col2 = st.columns(2)
-    col1.metric("Aktuelles Gewicht", "80.0 kg")
-    col2.metric("Ziel-Kalorien (Recomp)", "2600 kcal")
+    st.info("Abgeschlossene Workouts erscheinen hier. Tippe auf 'Workout', um zu beginnen!")
 
 # --- TAB 2: VERLAUF ---
 with tab_verlauf:
-    st.markdown("### Oktober 2025")
-    with st.container(border=True):
-        st.markdown("**Tag 1 Brust & Trizeps**")
-        st.caption("Donnerstag, 16. Oktober 2025 um 00:35")
-        st.write("2 × Chest Press (Machine) | **80 kg × 11**")
-        st.caption("⏱️ 2m | 🏋️ 1680 kg | 🏆 0 PRs")
-    
-    st.markdown("### September 2025")
-    with st.container(border=True):
-        st.markdown("**Tag 3 Schultern & Core**")
-        st.caption("Montag, 8. September 2025 um 16:14")
-        st.write("3 × Seated Overhead Press | **50 kg × 10**")
-        st.write("3 × Lateral Raise (Cable) | **10 kg × 10**")
-        st.caption("⏱️ 1h 18m | 🏋️ 2845 kg | 🏆 4 PRs")
+    st.markdown("### Trainings-Historie")
+    st.write("Du hast noch keine Workouts absolviert. Dein Verlauf ist leer.")
 
-# --- TAB 3: WORKOUT (inkl. Progressions-AI) ---
+# --- TAB 3: WORKOUT ---
 with tab_workout:
     st.markdown("### Schnellstart")
     if st.button("EIN LEERES WORKOUT BEGINNEN"):
-        st.success("Workout-Modus gestartet (wird im nächsten Schritt programmiert)")
+        st.success("Der Workout-Tracker wird aktiviert, sobald die Datenbank angebunden ist.")
     
-    st.markdown("### My Templates (3) ➕ 📂")
-    
-    # Simuliertes Workout mit der neuen AI-Logik
-    with st.expander("🔥 Workout heute starten: Gym (Ganzkörper/Recomp)"):
-        st.markdown("Hier greift der AI-Coach ein und analysiert deine letzten Gewichte:")
-        st.divider()
-        
-        st.markdown("**1. Kniebeugen (Squats)**")
-        st.info(generiere_empfehlung("Kniebeugen"))
-        st.number_input("Gewicht heute (kg)", value=82.5, step=2.5, key="sq_w")
-        
-        st.markdown("**2. Bankdrücken**")
-        st.warning(generiere_empfehlung("Bankdrücken"))
-        st.number_input("Gewicht heute (kg)", value=100.0, step=2.5, key="bp_w")
-        
-        st.button("✅ Workout loggen (Speicherung folgt)")
+    st.markdown("### Vorlagen ➕ 📂")
+    st.write("Keine Vorlagen vorhanden. Erstelle einen Plan, um ihn hier zu speichern.")
 
 # --- TAB 4: ÜBUNGEN ---
 with tab_uebungen:
-    st.markdown("### A")
-    st.markdown("**Ab Wheel** | Core")
-    st.markdown("**Arnold Press (Dumbbell)** | Shoulders")
-    st.markdown("**Around the World** | Chest")
-    st.divider()
-    st.markdown("### B")
-    st.markdown("**Back Extension** | Back")
-    st.markdown("**Ball Slams** | Full Body")
-    st.markdown("**Bankdrücken** | Chest")
+    st.text_input("🔍 Übungen durchsuchen...", placeholder="z.B. Squat, Bench Press")
+    
+    # Generiert die alphabetische Liste dynamisch
+    for letter in sorted(exercise_db.keys()):
+        st.markdown(f"### {letter}")
+        for exercise_name, muscle_group in exercise_db[letter]:
+            st.markdown(f"**{exercise_name}**")
+            st.markdown(f"<div class='exercise-muscle'>{muscle_group}</div>", unsafe_allow_html=True)
+        st.divider()
 
 # --- TAB 5: MESSEN ---
 with tab_messen:
