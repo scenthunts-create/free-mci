@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+import json
+import gspread
+from google.oauth2.service_account import Credentials
 
-# --- 1. SEITEN-KONFIGURATION ---
+# --- 1. SEITEN-KONFIGURATION & CSS ---
 st.set_page_config(page_title="Free-MCI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 2. CUSTOM CSS (Das Strong-Design) ---
 st.markdown("""
 <style>
     .stApp { background-color: #1B2126; color: #FFFFFF; }
@@ -22,31 +24,35 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. DATENBANK (Clean Slate) ---
-# Verlauf und Workouts sind jetzt komplett auf Null gesetzt
-letztes_workout = {}
+# --- 2. DATENBANK ANBINDUNG (Google Sheets) ---
+@st.cache_resource
+def init_connection():
+    # Holt sich den geheimen Schlüssel aus dem Streamlit Safe
+    key_dict = json.loads(st.secrets["GCP_JSON"])
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+    return client
 
-# Die massive Übungs-Bibliothek (Alphabetisch sortiert)
+# Verbindung herstellen
+try:
+    client = init_connection()
+    sheet = client.open("Free-MCI-DB")
+    verlauf_blatt = sheet.worksheet("Verlauf")
+    db_status = "🟢 Live-Verbindung zur Datenbank aktiv!"
+    verbindung_erfolgreich = True
+except Exception as e:
+    db_status = "🔴 Keine Verbindung. Bitte prüfe die Secrets in Streamlit."
+    verbindung_erfolgreich = False
+
+# --- 3. ÜBUNGS-DATENBANK (Auszug) ---
 exercise_db = {
-    "A": [("Ab Wheel", "Core"), ("Aerobics", "Cardio"), ("Arnold Press (Dumbbell)", "Shoulders"), ("Around the World", "Chest"), ("Ausfallschritte (Lunges)", "Legs")],
-    "B": [("Back Extension", "Back"), ("Ball Slams", "Full Body"), ("Bankdrücken (Barbell)", "Chest"), ("Bankdrücken (Dumbbell)", "Chest"), ("Burpees", "Full Body")],
-    "C": [("Cable Crossover", "Chest"), ("Calf Raise (Machine)", "Legs"), ("Chest Press (Machine)", "Chest"), ("Crunch", "Core"), ("Cycling", "Cardio")],
-    "D": [("Deadlift (Barbell)", "Back"), ("Decline Bench Press", "Chest"), ("Dips", "Chest/Arms"), ("Dumbbell Row", "Back")],
-    "F": [("Face Pull (Cable)", "Shoulders"), ("Farmer's Walk", "Full Body"), ("Front Squat", "Legs")],
-    "H": [("Hanging Leg Raise", "Core"), ("Hip Thrust (Barbell)", "Legs"), ("Hyperextension", "Back")],
-    "I": [("Incline Bench Press (Barbell)", "Chest"), ("Incline Bench Press (Dumbbell)", "Chest")],
-    "K": [("Klimmzüge (Pull Up)", "Back"), ("Kniebeugen (Squat)", "Legs"), ("Kreuzheben", "Back")],
-    "L": [("Lat Pulldown (Cable)", "Back"), ("Lateral Raise (Cable)", "Shoulders"), ("Lateral Raise (Dumbbell)", "Shoulders"), ("Leg Extension (Machine)", "Legs"), ("Leg Press", "Legs")],
-    "M": [("Military Press (Barbell)", "Shoulders"), ("Muscle-Up", "Full Body")],
-    "P": [("Pec Deck (Machine)", "Chest"), ("Pendlay Row", "Back"), ("Pistol Squat", "Legs"), ("Plank", "Core"), ("Pull Up", "Back"), ("Pull Up (Assisted)", "Back"), ("Push Press", "Shoulders"), ("Push Up", "Chest")],
-    "R": [("Rack Pull", "Back"), ("Reverse Crunch", "Core"), ("Reverse Fly (Machine)", "Shoulders"), ("Romanian Deadlift", "Legs"), ("Russian Twist", "Core")],
-    "S": [("Seated Calf Raise", "Legs"), ("Seated Leg Curl", "Legs"), ("Seated Overhead Press", "Shoulders"), ("Shrug (Barbell)", "Back"), ("Single Leg Bridge", "Legs"), ("Sit Up", "Core"), ("Skullcrusher", "Arms"), ("Squat (Barbell)", "Legs"), ("Squat (Bodyweight)", "Legs"), ("Squat (Smith Machine)", "Legs"), ("Standing Calf Raise", "Legs"), ("Sumo Deadlift", "Back")],
-    "T": [("T Bar Row", "Back"), ("Thruster", "Full Body"), ("Toes To Bar", "Core"), ("Torso Rotation (Machine)", "Core"), ("Trap Bar Deadlift", "Legs"), ("Triceps Dip", "Arms"), ("Triceps Extension (Cable)", "Arms"), ("Triceps Pushdown (Cable)", "Arms")],
-    "U": [("Upright Row (Barbell)", "Shoulders"), ("Upright Row (Cable)", "Shoulders")],
-    "V": [("V Up", "Core")],
-    "W": [("Walking", "Cardio"), ("Wide Pull Up", "Back"), ("Wrist Roller", "Arms")],
-    "Y": [("Yoga", "Cardio")],
-    "Z": [("Zercher Squat", "Legs")]
+    "B": [("Bankdrücken (Barbell)", "Chest"), ("Burpees", "Full Body")],
+    "K": [("Klimmzüge (Pull Up)", "Back"), ("Kniebeugen (Squat)", "Legs")],
+    "P": [("Plank", "Core"), ("Push Up", "Chest")]
 }
 
 # --- 4. NAVIGATION ---
@@ -61,48 +67,46 @@ with tab_profil:
         st.markdown("<div style='background-color:#E91E63; border-radius:50%; width:50px; height:50px; display:flex; justify-content:center; align-items:center; font-size:24px; font-weight:bold;'>S</div>", unsafe_allow_html=True)
     with col_name:
         st.subheader("ScentHunts")
-        st.caption("0 Workouts")
     
     st.divider()
-    st.markdown("### Dashboard ➕")
-    st.info("Abgeschlossene Workouts erscheinen hier. Tippe auf 'Workout', um zu beginnen!")
+    st.markdown("### System Check")
+    if verbindung_erfolgreich:
+        st.success(db_status)
+    else:
+        st.error(db_status)
 
 # --- TAB 2: VERLAUF ---
 with tab_verlauf:
     st.markdown("### Trainings-Historie")
-    st.write("Du hast noch keine Workouts absolviert. Dein Verlauf ist leer.")
+    if verbindung_erfolgreich:
+        # Liest alle Daten aus der Tabelle "Verlauf"
+        daten = verlauf_blatt.get_all_records()
+        if not daten:
+            st.write("Du hast noch keine Workouts absolviert. Dein Verlauf ist leer.")
+        else:
+            # Zeigt die Google Tabelle direkt im Dashboard an
+            df = pd.DataFrame(daten)
+            st.dataframe(df, use_container_width=True)
+    else:
+        st.write("Warte auf Datenbank-Verbindung...")
 
-# --- TAB 3: WORKOUT ---
+# --- TAB 3: WORKOUT (Der Live-Test) ---
 with tab_workout:
-    st.markdown("### Schnellstart")
-    if st.button("EIN LEERES WORKOUT BEGINNEN"):
-        st.success("Der Workout-Tracker wird aktiviert, sobald die Datenbank angebunden ist.")
+    st.markdown("### System-Testlauf")
+    st.info("Wir testen jetzt, ob die App Daten in dein Google Sheet schreiben kann.")
     
-    st.markdown("### Vorlagen ➕ 📂")
-    st.write("Keine Vorlagen vorhanden. Erstelle einen Plan, um ihn hier zu speichern.")
+    if st.button("🚀 TEST-WORKOUT IN DATENBANK SPEICHERN"):
+        if verbindung_erfolgreich:
+            heute = str(date.today())
+            # Schreibt eine Zeile in dein Google Sheet
+            neue_zeile = [heute, "Test-Workout", "Bankdrücken (Barbell)", 80, 10]
+            verlauf_blatt.append_row(neue_zeile)
+            st.success("Test erfolgreich! Öffne dein Google Sheet, dort sollte jetzt eine neue Zeile stehen!")
+        else:
+            st.error("Verbindung fehlt noch.")
 
-# --- TAB 4: ÜBUNGEN ---
+# --- TAB 4 & 5: (Reduziert für Übersichtlichkeit) ---
 with tab_uebungen:
-    st.text_input("🔍 Übungen durchsuchen...", placeholder="z.B. Squat, Bench Press")
-    
-    # Generiert die alphabetische Liste dynamisch
-    for letter in sorted(exercise_db.keys()):
-        st.markdown(f"### {letter}")
-        for exercise_name, muscle_group in exercise_db[letter]:
-            st.markdown(f"**{exercise_name}**")
-            st.markdown(f"<div class='exercise-muscle'>{muscle_group}</div>", unsafe_allow_html=True)
-        st.divider()
-
-# --- TAB 5: MESSEN ---
+    st.markdown("Übungs-Datenbank wird im nächsten Schritt wieder voll geladen.")
 with tab_messen:
-    st.markdown("### Allgemein")
-    st.write("Gewicht")
-    st.write("Körperfettanteil")
-    st.write("Kalorieneinnahme")
-    st.divider()
-    st.markdown("### Körperteil")
-    st.write("Nacken")
-    st.write("Schultern")
-    st.write("Brust")
-    st.write("Linker Bizeps")
-    st.write("Rechter Bizeps")
+    st.markdown("Körpermaße-Tracker wird geladen.")
